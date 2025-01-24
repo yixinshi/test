@@ -1,6 +1,10 @@
 import ray
 import jax
 
+# To submit the job to Ray:
+# ray job submit --runtime-env-json='{"working_dir": "."}' -- python j1.py
+
+ray.init()
 
 @ray.remote(resources={"TPU": 4})
 def my_function() -> int:
