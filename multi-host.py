@@ -8,6 +8,7 @@ import torch.distributed as dist
 import torch_xla.runtime as xr
 from torch_xla._internal import pjrt
 
+os.environ["RAY_DEDUP_LOGS"] = "0"
 
 WORLD_SIZE = 8
 
