@@ -6,3 +6,4 @@ torchvision
 torch_xla[tpu]
 jaxlib
 jax
+ray[data]
