@@ -1,0 +1,123 @@
+diff --git a/examples/example_datasets.py b/examples/example_datasets.py
+index fab2c4a..c18d4e8 100644
+--- a/examples/example_datasets.py
++++ b/examples/example_datasets.py
+@@ -34,9 +34,11 @@ def example_datasets(option: str) -> Tuple[ray.data.Dataset, ray.data.Dataset]:
+ 
+ def _load_huggingface_dataset() -> Tuple[Dataset, Dataset]:
+     """Load the C4 dataset from HuggingFace."""
+-    hf_train_dataset = load_dataset("allenai/c4", "en", split="train", streaming=True)
++    #hf_train_dataset = load_dataset("yixinshi/chinese20k", "en", split="train", streaming=True)
++    hf_train_dataset = load_dataset("yixinshi/chinese20k", split="train", streaming=True)
+     hf_val_dataset = load_dataset(
+-        "allenai/c4", "en", split="validation", streaming=True
++        "yixinshi/chinese20k", split="train", streaming=True
++        #"yixinshi/chinese20k", "en", split="validation", streaming=True
+     )
+ 
+     return (
+diff --git a/examples/multihost/ray/TPU/sft_lora_example.py b/examples/multihost/ray/TPU/sft_lora_example.py
+index 1a3f0ef..9416968 100644
+--- a/examples/multihost/ray/TPU/sft_lora_example.py
++++ b/examples/multihost/ray/TPU/sft_lora_example.py
+@@ -43,12 +43,12 @@ def main(train_ds, eval_ds, split_data_across_host):
+     from examples.singlehost.sft_lora_example import run_workload
+     run_workload(
+         train_ds,
+-        eval_ds,
++        eval_source=None,
+         dataset_is_sharded_per_host=split_data_across_host,
+     )
+ 
+ # Create mulit-host datasets
+-train_ds, eval_ds = example_datasets(option = "sft_toy")
++train_ds, eval_ds = example_datasets(option = "hf")
+ split_data_across_host =  False
+ if split_data_across_host: 
+     train_ds: List[Any] = split_dataset(train_ds, num_hosts=num_tpu_hosts)
+diff --git a/examples/singlehost/sft_lora_example.py b/examples/singlehost/sft_lora_example.py
+index a8cf65c..15e4f9c 100644
+--- a/examples/singlehost/sft_lora_example.py
++++ b/examples/singlehost/sft_lora_example.py
+@@ -36,9 +36,9 @@ config = {
+     "use_lora": True,
+     "lora_rank": 4,
+     "precision": "mixed_bfloat16",
+-    "training_steps": 100,
+-    "eval_steps_interval": 10,
+-    "log_steps_interval": 10,
++    "training_steps": 10,
++    "eval_steps_interval": 0,
++    "log_steps_interval": 2,
+     "per_device_batch_size": 1,
+     "max_eval_samples": 50,
+ }
+@@ -70,10 +70,14 @@ def run_workload(
+         train_source,
+         tokenizer=tokenizer,
+         max_seq_len=config["seq_len"],
++        column_mapping={"prompt":"input", "answer": "output"},
+     )
+-    eval_dataset = SFTDataset(
+-        eval_source, tokenizer=tokenizer, max_seq_len=config["seq_len"]
+-    )
++    if eval_source:
++      eval_dataset = SFTDataset(
++          eval_source, tokenizer=tokenizer, max_seq_len=config["seq_len"]
++      )
++    else:
++      eval_dataset = None
+ 
+     # Create optimizer
+     optimizer = keras.optimizers.AdamW(learning_rate=5e-5, weight_decay=0.01)
+@@ -84,11 +88,15 @@ def run_workload(
+         per_device_batch_size=config["per_device_batch_size"],
+         dataset_is_sharded_per_host=dataset_is_sharded_per_host,
+     )
+-    eval_dataloader = Dataloader(
+-        eval_dataset,
+-        per_device_batch_size=config["per_device_batch_size"],
+-        dataset_is_sharded_per_host=dataset_is_sharded_per_host,
+-    )
++
++    if eval_source:
++        eval_dataloader = Dataloader(
++            eval_dataset,
++            per_device_batch_size=config["per_device_batch_size"],
++            dataset_is_sharded_per_host=dataset_is_sharded_per_host,
++        )
++    else:
++        eval_dataloader = None
+ 
+     # Initialize trainer
+     trainer = Trainer(
+@@ -107,7 +115,7 @@ def run_workload(
+ 
+     # Test after tuning
+     pred = model.generate(
+-        "What is your name?", max_length=30, tokenizer=tokenizer, return_decoded=True
++        "主公要吃饭去了", max_length=30, tokenizer=tokenizer, return_decoded=True
+     )
+     print("Tuned model generates:", pred)
+ 
+diff --git a/kithara/trainer/trainer.py b/kithara/trainer/trainer.py
+index 55c79db..9914f59 100644
+--- a/kithara/trainer/trainer.py
++++ b/kithara/trainer/trainer.py
+@@ -243,7 +243,7 @@ class Trainer:
+                 self.callbacks.on_train_batch_end(self.step_count, {"loss": loss})
+ 
+                 # Periodic evaluation
+-                if self.step_count % self.eval_steps_interval == 0:
++                if self.eval_dataloader and self.step_count % self.eval_steps_interval == 0:
+                     self.evaluate(state)
+             # Compute epoch statistics
+             epoch_loss = epoch_loss / train_set_size
+@@ -518,7 +518,3 @@ class Trainer:
+         assert (
+             self.max_eval_samples >= self.global_batch_size
+         ), "Number of eval examples must be greater or equal to global batch size"
+-
+-        assert not (
+-            self.eval_steps_interval != sys.maxsize and self.eval_dataloader is None
+-        ), "Evaluation steps interval is set but no eval dataloader is provided"
