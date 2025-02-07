@@ -36,22 +36,18 @@ index 1a3f0ef..9416968 100644
  if split_data_across_host: 
      train_ds: List[Any] = split_dataset(train_ds, num_hosts=num_tpu_hosts)
 diff --git a/examples/singlehost/sft_lora_example.py b/examples/singlehost/sft_lora_example.py
-index a8cf65c..15e4f9c 100644
+index a8cf65c..1a4dc02 100644
 --- a/examples/singlehost/sft_lora_example.py
 +++ b/examples/singlehost/sft_lora_example.py
-@@ -36,9 +36,9 @@ config = {
-     "use_lora": True,
+@@ -37,7 +37,7 @@ config = {
      "lora_rank": 4,
      "precision": "mixed_bfloat16",
--    "training_steps": 100,
+     "training_steps": 100,
 -    "eval_steps_interval": 10,
--    "log_steps_interval": 10,
-+    "training_steps": 10,
 +    "eval_steps_interval": 0,
-+    "log_steps_interval": 2,
+     "log_steps_interval": 10,
      "per_device_batch_size": 1,
      "max_eval_samples": 50,
- }
 @@ -70,10 +70,14 @@ def run_workload(
          train_source,
          tokenizer=tokenizer,
@@ -91,20 +87,72 @@ index a8cf65c..15e4f9c 100644
  
      # Initialize trainer
      trainer = Trainer(
-@@ -107,7 +115,7 @@ def run_workload(
+@@ -104,12 +112,28 @@ def run_workload(
+ 
+     # Start training
+     trainer.train()
++    print("Yixin: training done 2025!")
  
      # Test after tuning
-     pred = model.generate(
+-    pred = model.generate(
 -        "What is your name?", max_length=30, tokenizer=tokenizer, return_decoded=True
-+        "主公要吃饭去了", max_length=30, tokenizer=tokenizer, return_decoded=True
-     )
-     print("Tuned model generates:", pred)
+-    )
+-    print("Tuned model generates:", pred)
++    alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
++                   ### Instruction:
++                   {}
++
++                   ### Input:
++                   {}
++
++                   ### Response: {}"""
++    alpaca_prompt = alpaca_prompt.format("Please translate!", "主公要吃饭去", "")
++    print("1"*200)
++    pred = model.generate("what is your name?", max_length=30, tokenizer=tokenizer, return_decoded=True)
++    print("yxshi:  what is name model generates:", pred)
++    print("2"*200)
++    print("Yixin: Input for predicton: {}".format(alpaca_prompt))
++    pred = model.generate(alpaca_prompt, max_length=30, tokenizer=tokenizer, return_decoded=True)
++    print("3"*200)
++    print("yxshi: Tuned model generates:", pred)
++    print("4"*200)
++    print ("Yixin: Prediction done 2026")
  
+ 
+ if __name__ == "__main__":
+diff --git a/kithara/dataset/sft.py b/kithara/dataset/sft.py
+index c8b00ee..090bd11 100644
+--- a/kithara/dataset/sft.py
++++ b/kithara/dataset/sft.py
+@@ -72,11 +72,21 @@ class SFTDataset(TextCompletionDataset):
+ 
+         """
+         prompt, answer = sample["prompt"], sample["answer"]
++        alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
++                           ### Instruction:
++                           {}
++
++                           ### Input:
++                           {}
++
++                           ### Response: {}"""
++        alpaca_prompt_full = alpaca_prompt.format("Please translate!", prompt, answer)
+         full_seq = HFtokenize(
+-            f"<bos>{prompt}{answer}<eos>", self.tokenizer, seq_len=self.max_seq_len
++            f"<bos>{alpaca_prompt_full}<eos>", self.tokenizer, seq_len=self.max_seq_len
+         )
++        alpaca_prompt_prompt = alpaca_prompt_full[:-len(answer)]
+         prompt_seq = HFtokenize(
+-            f"<bos>{prompt}",
++            f"<bos>{alpaca_prompt_prompt}",
+             self.tokenizer,
+             seq_len=self.max_seq_len,
+             padding="do_not_pad",
 diff --git a/kithara/trainer/trainer.py b/kithara/trainer/trainer.py
-index 55c79db..9914f59 100644
+index 55c79db..ca1abef 100644
 --- a/kithara/trainer/trainer.py
 +++ b/kithara/trainer/trainer.py
-@@ -243,7 +243,7 @@ class Trainer:
+@@ -243,13 +243,14 @@ class Trainer:
                  self.callbacks.on_train_batch_end(self.step_count, {"loss": loss})
  
                  # Periodic evaluation
@@ -113,7 +161,14 @@ index 55c79db..9914f59 100644
                      self.evaluate(state)
              # Compute epoch statistics
              epoch_loss = epoch_loss / train_set_size
-@@ -518,7 +518,3 @@ class Trainer:
+             self.callbacks.on_epoch_end(self.epoch_count, {"epoch_loss": epoch_loss})
+             print(f"Train epoch {self.epoch_count} loss : {epoch_loss}")
+ 
++        print("yxshi: training done! calling callbacks on_train_end")
+         self.callbacks.on_train_end()
+ 
+     def save_model(self, filepath):
+@@ -518,7 +519,3 @@ class Trainer:
          assert (
              self.max_eval_samples >= self.global_batch_size
          ), "Number of eval examples must be greater or equal to global batch size"
