@@ -36,7 +36,7 @@ index 1a3f0ef..9416968 100644
  if split_data_across_host: 
      train_ds: List[Any] = split_dataset(train_ds, num_hosts=num_tpu_hosts)
 diff --git a/examples/singlehost/sft_lora_example.py b/examples/singlehost/sft_lora_example.py
-index a8cf65c..1a4dc02 100644
+index a8cf65c..c9d3122 100644
 --- a/examples/singlehost/sft_lora_example.py
 +++ b/examples/singlehost/sft_lora_example.py
 @@ -37,7 +37,7 @@ config = {
@@ -87,7 +87,7 @@ index a8cf65c..1a4dc02 100644
  
      # Initialize trainer
      trainer = Trainer(
-@@ -104,12 +112,28 @@ def run_workload(
+@@ -104,12 +112,35 @@ def run_workload(
  
      # Start training
      trainer.train()
@@ -98,6 +98,7 @@ index a8cf65c..1a4dc02 100644
 -        "What is your name?", max_length=30, tokenizer=tokenizer, return_decoded=True
 -    )
 -    print("Tuned model generates:", pred)
++    print("1"*200)
 +    alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 +                   ### Instruction:
 +                   {}
@@ -106,15 +107,21 @@ index a8cf65c..1a4dc02 100644
 +                   {}
 +
 +                   ### Response: {}"""
++    english_only_prompt = alpaca_prompt.format("Please translate!", "English only", "")
 +    alpaca_prompt = alpaca_prompt.format("Please translate!", "主公要吃饭去", "")
-+    print("1"*200)
 +    pred = model.generate("what is your name?", max_length=30, tokenizer=tokenizer, return_decoded=True)
-+    print("yxshi:  what is name model generates:", pred)
++    print("yxshi:  Simple output:", pred)
++
 +    print("2"*200)
-+    print("Yixin: Input for predicton: {}".format(alpaca_prompt))
-+    pred = model.generate(alpaca_prompt, max_length=30, tokenizer=tokenizer, return_decoded=True)
++    print("Yixin:English only input: {}".format(english_only_prompt))
++    pred = model.generate(english_only_prompt, max_length=400, tokenizer=tokenizer, return_decoded=True)
++    print("yxshi:  English only output:", pred)
++
 +    print("3"*200)
++    print("Yixin: Input for large predicton: {}".format(alpaca_prompt))
++    pred = model.generate(alpaca_prompt, max_length=400, tokenizer=tokenizer, return_decoded=True)
 +    print("yxshi: Tuned model generates:", pred)
++
 +    print("4"*200)
 +    print ("Yixin: Prediction done 2026")
  
